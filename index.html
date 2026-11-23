@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Say it board</title>
+<meta name="description" content="A text-to-speech soundboard: type phrases into tiles and press to speak.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%F0%9F%94%8A%3C/text%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#e9e6df; --panel:#f6f4ef; --ink:#1d1b19; --muted:#6b665e; --line:#cfcac0;
+  --tile-l:88%; --tile-s:70%; --tile-ink:#1d1b19; --pad-l:52%;
+  --font:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#16181d; --panel:#1f2229; --ink:#eceae5; --muted:#9a9a9f; --line:#343842;
+    --tile-l:22%; --tile-s:45%; --tile-ink:#eceae5; --pad-l:58%;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#16181d; --panel:#1f2229; --ink:#eceae5; --muted:#9a9a9f; --line:#343842;
+  --tile-l:22%; --tile-s:45%; --tile-ink:#eceae5; --pad-l:58%;
+}
+*,*:before,*:after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);min-height:100vh}
+.wrap{max-width:1100px;margin:0 auto;padding:20px 16px 40px}
+header{display:flex;flex-wrap:wrap;gap:14px 20px;align-items:end;justify-content:space-between;margin-bottom:18px}
+h1{margin:0;font-size:clamp(2rem,6vw,3.2rem);font-weight:800;letter-spacing:-.03em;line-height:1}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+.controls label{display:flex;flex-direction:column;font-size:.75rem;color:var(--muted);gap:3px}
+select,textarea,input[type=range],button{font-family:inherit;color:inherit}
+select{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:.9rem;max-width:230px}
+input[type=range]{width:100px;accent-color:var(--ink)}
+.stop{background:var(--ink);color:var(--bg);border:0;border-radius:10px;padding:10px 16px;font-weight:600;cursor:pointer;align-self:stretch}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+@media(min-width:640px){.grid{grid-template-columns:repeat(3,1fr)}}
+@media(min-width:900px){.grid{grid-template-columns:repeat(4,1fr)}}
+.tile{background:hsl(var(--h) var(--tile-s) var(--tile-l));color:var(--tile-ink);border-radius:18px;padding:10px;display:flex;flex-direction:column;gap:8px;border:1px solid hsl(var(--h) 40% 50% / .35)}
+.tile textarea{width:100%;min-height:74px;resize:none;border:0;border-radius:10px;padding:8px 10px;background:hsl(0 0% 100% / .45);font-size:.95rem;line-height:1.3;color:var(--tile-ink)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .tile textarea{background:hsl(0 0% 0% / .25)}}
+:root[data-theme="dark"] .tile textarea{background:hsl(0 0% 0% / .25)}
+.tile textarea::placeholder{color:currentColor;opacity:.5}
+.pad{border:0;border-radius:12px;min-height:64px;font-size:1.05rem;font-weight:800;cursor:pointer;background:hsl(var(--h) 75% var(--pad-l));color:#1d1b19;box-shadow:0 4px 0 hsl(var(--h) 60% 30% / .55);transition:transform .06s,box-shadow .06s}
+.pad:active,.tile.playing .pad{transform:translateY(3px);box-shadow:0 1px 0 hsl(var(--h) 60% 30% / .55)}
+.tile.playing .pad{filter:brightness(1.12)}
+.tile select{width:100%;max-width:none;font-size:.78rem;padding:4px 6px}
+:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.note{color:var(--muted);font-size:.85rem;margin-top:16px}
+#warn{display:none;background:#f3c9a8;color:#3a1d05;border-radius:10px;padding:10px 12px;margin-bottom:12px}
+@media (prefers-reduced-motion:reduce){.pad{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="warn">This browser doesn’t support speech synthesis. Try Chrome, Edge, Safari, or Firefox.</div>
+  <header>
+    <h1>Say it board</h1>
+    <div class="controls">
+      <label>Default voice <select id="voice"></select></label>
+      <label>Speed <input type="range" id="rate" min="0.5" max="2" step="0.05" value="1"></label>
+      <label>Pitch <input type="range" id="pitch" min="0.2" max="2" step="0.05" value="1"></label>
+      <button class="stop" id="stop" type="button">Stop</button>
+    </div>
+  </header>
+  <main class="grid" id="grid"></main>
+  <p class="note">Type a phrase in any tile, then press the big button to hear it. Each tile can use its own voice. Ctrl/Cmd + Enter in a tile also plays it. Your tiles are saved in this browser.</p>
+</div>
+<script>
+(function(){
+  var KEY="say-it-board-v1", N=12;
+  var synth=window.speechSynthesis;
+  if(!synth||!window.SpeechSynthesisUtterance){document.getElementById("warn").style.display="block";}
+  var state={voice:"",rate:1,pitch:1,tiles:[]};
+  for(var i=0;i<N;i++)state.tiles.push({text:"",voice:""});
+  try{
+    var saved=JSON.parse(localStorage.getItem(KEY)||"null");
+    if(saved){
+      state.voice=saved.voice||"";state.rate=saved.rate||1;state.pitch=saved.pitch||1;
+      (saved.tiles||[]).slice(0,N).forEach(function(t,i){state.tiles[i]={text:t.text||"",voice:t.voice||""};});
+    }
+  }catch(e){}
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}}
+
+  var voiceSel=document.getElementById("voice"),rate=document.getElementById("rate"),pitch=document.getElementById("pitch");
+  var grid=document.getElementById("grid"),voices=[],tileEls=[],tileSels=[];
+  rate.value=state.rate;pitch.value=state.pitch;
+
+  function findVoice(uri){for(var i=0;i<voices.length;i++)if(voices[i].voiceURI===uri)return voices[i];return null;}
+  function label(v){return v.name+" ("+v.lang+")";}
+  function fillSelect(sel,current,first){
+    sel.innerHTML="";
+    var o=document.createElement("option");o.value="";o.textContent=first;sel.appendChild(o);
+    voices.forEach(function(v){var o=document.createElement("option");o.value=v.voiceURI;o.textContent=label(v);sel.appendChild(o);});
+    sel.value=current;
+  }
+  function loadVoices(){
+    if(!synth)return;
+    voices=synth.getVoices().slice().sort(function(a,b){return (a.lang+a.name).localeCompare(b.lang+b.name);});
+    var def=voices.filter(function(v){return v.default;})[0];
+    fillSelect(voiceSel,state.voice,def?"System default":"Default");
+    tileSels.forEach(function(s,i){fillSelect(s,state.tiles[i].voice,"Use default voice");});
+  }
+
+  var current=null;
+  function speak(i){
+    if(!synth)return;
+    var t=state.tiles[i];
+    if(current===i&&synth.speaking){stop();return;}
+    synth.cancel();
+    var text=t.text.trim();
+    if(!text){tileEls[i].querySelector("textarea").focus();return;}
+    var u=new SpeechSynthesisUtterance(text);
+    var v=findVoice(t.voice)||findVoice(state.voice);
+    if(v){u.voice=v;u.lang=v.lang;}
+    u.rate=state.rate;u.pitch=state.pitch;
+    u.onstart=function(){mark(i);};
+    u.onend=u.onerror=function(){if(current===i)mark(null);};
+    current=i;mark(i);
+    synth.speak(u);
+  }
+  function stop(){if(synth)synth.cancel();mark(null);}
+  function mark(i){current=i;tileEls.forEach(function(el,k){el.classList.toggle("playing",k===i);});}
+
+  for(var i=0;i<N;i++)(function(i){
+    var el=document.createElement("div");
+    el.className="tile";el.style.setProperty("--h",Math.round(i*30+12));
+    var ta=document.createElement("textarea");
+    ta.placeholder="Type something to say…";ta.value=state.tiles[i].text;ta.setAttribute("aria-label","Phrase for tile "+(i+1));
+    ta.addEventListener("input",function(){state.tiles[i].text=ta.value;save();});
+    ta.addEventListener("keydown",function(e){if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){e.preventDefault();speak(i);}});
+    var sel=document.createElement("select");sel.setAttribute("aria-label","Voice for tile "+(i+1));
+    sel.addEventListener("change",function(){state.tiles[i].voice=sel.value;save();});
+    var btn=document.createElement("button");btn.type="button";btn.className="pad";btn.textContent="Play";
+    btn.addEventListener("click",function(){speak(i);});
+    el.appendChild(ta);el.appendChild(sel);el.appendChild(btn);
+    grid.appendChild(el);tileEls.push(el);tileSels.push(sel);
+  })(i);
+
+  voiceSel.addEventListener("change",function(){state.voice=voiceSel.value;save();});
+  rate.addEventListener("input",function(){state.rate=parseFloat(rate.value);save();});
+  pitch.addEventListener("input",function(){state.pitch=parseFloat(pitch.value);save();});
+  document.getElementById("stop").addEventListener("click",stop);
+  loadVoices();
+  if(synth){synth.onvoiceschanged=loadVoices;setTimeout(loadVoices,400);}
+})();
+</script>
+</body>
+</html>
